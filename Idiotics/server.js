@@ -1,50 +1,39 @@
-const express = require('express');
-const http = require('http');
-const { Server } = require('socket.io');
-const dotenv = require('dotenv');
-const connectDB = require('./config/db');
-const Driver = require('./models/Driver');
-
-
-dotenv.config();
-connectDB();
+const express = require("express");
+const http = require("http");
+const socketIo = require("socket.io");
+const axios = require("axios");
 
 const app = express();
 const server = http.createServer(app);
-const io = new Server(server, {
-  cors: {
-    origin: '*', // Adjust if necessary
-  }
-});
+const io = socketIo(server);
 
-app.use(express.json());
+let driverLocation = { lat: 37.7749, lng: -122.4194 }; // Default Location: SF
 
-// Socket.IO Connection
-io.on('connection', (socket) => {
-    console.log('A user connected:', socket.id);
-  
-    // Update driver location
-    socket.on('updateLocation', async (data) => {
-      const { driverId, latitude, longitude } = data;
-      await Driver.findByIdAndUpdate(driverId, { latitude, longitude });
-      console.log(`Driver ${driverId} location updated to (${latitude}, ${longitude})`);
-      io.emit('locationUpdate', { driverId, latitude, longitude }); // Broadcast to all users
-    });
-  
-    socket.on('disconnect', () => {
-      console.log('User disconnected:', socket.id);
-    });
+io.on("connection", (socket) => {
+  console.log("Client connected");
+
+  socket.emit("locationUpdate", driverLocation);
+
+  socket.on("updateLocation", async (newLocation) => {
+    driverLocation = newLocation;
+    io.emit("locationUpdate", driverLocation);
+
+    // Fetch optimized route using OSRM
+    const route = await getRoute(newLocation, { lat: 37.7884, lng: -122.4076 });
+    io.emit("routeUpdate", route);
   });
-  
-
-// Import routes
-const authRoutes = require('./routes/authRoutes');
-app.use('/api/auth', authRoutes);
-
-app.get('/', (req, res) => {
-  res.send('Welcome to Rideable API!');
 });
 
-const PORT = process.env.PORT || 3000;
-server.listen(PORT, () => console.log(`Server running on port ${PORT}`));
-app.listen(PORT, () => console.log(`Server running on port ${PORT}`));
+async function getRoute(start, end) {
+  try {
+    const response = await axios.get(
+      `http://localhost:5000/route/v1/driving/${start.lng},${start.lat};${end.lng},${end.lat}?overview=full&geometries=geojson`
+    );
+    return response.data;
+  } catch (error) {
+    console.error("Error fetching route:", error);
+    return null;
+  }
+}
+
+server.listen(3000, () => console.log("Server running on port 3000"));
