@@ -1,33 +1,53 @@
-const socket = io('http://localhost:3000');
+const socket = io("http://localhost:3000");
 let map;
-let markers = {};
+let driverMarker;
+let driverPosition = { lat: 37.7749, lng: -122.4194 }; // Default SF location
+let routePath;
 
-// Initialize Google Map
 function initMap() {
   map = new google.maps.Map(document.getElementById("map"), {
-    center: { lat: 20.5937, lng: 78.9629 }, // Centered at India
-    zoom: 5,
+    center: driverPosition,
+    zoom: 14,
+  });
+
+  driverMarker = new google.maps.Marker({
+    position: driverPosition,
+    map: map,
+    title: "Driver Location",
+    icon: "https://maps.google.com/mapfiles/ms/icons/blue-dot.png",
+  });
+
+  socket.on("locationUpdate", (data) => {
+    driverPosition = { lat: data.lat, lng: data.lng };
+    driverMarker.setPosition(driverPosition);
+    map.setCenter(driverPosition);
+  });
+
+  socket.on("routeUpdate", (route) => {
+    drawRoute(route);
   });
 }
 
-// Listen for real-time location updates
-socket.on('locationUpdate', (data) => {
-  const { driverId, latitude, longitude } = data;
+function drawRoute(route) {
+  if (routePath) routePath.setMap(null); // Remove existing route
 
-  // Update marker if it exists, else create a new one
-  if (markers[driverId]) {
-    markers[driverId].setPosition({ lat: latitude, lng: longitude });
-  } else {
-    markers[driverId] = new google.maps.Marker({
-      position: { lat: latitude, lng: longitude },
-      map: map,
-      title: `Driver: ${driverId}`,
-    });
-  }
+  const routeCoords = route.routes[0].geometry.coordinates.map(([lng, lat]) => ({ lat, lng }));
 
-  // Center the map on the driver
-  map.panTo({ lat: latitude, lng: longitude });
-});
+  routePath = new google.maps.Polyline({
+    path: routeCoords,
+    geodesic: true,
+    strokeColor: "#FF0000",
+    strokeOpacity: 1.0,
+    strokeWeight: 4,
+    map: map,
+  });
+}
 
-// Initialize the map after loading
-window.initMap = initMap;
+// Simulate driver movement
+function simulateMovement() {
+  driverPosition.lat += 0.001;
+  driverPosition.lng += 0.001;
+  socket.emit("updateLocation", driverPosition);
+}
+
+window.onload = initMap;
