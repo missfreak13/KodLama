@@ -1,15 +1,45 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8" />
-  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Rideable - Real-Time Tracking</title>
-  <script src="https://maps.googleapis.com/maps/api/js?key=tobefilled"></script>
-</head>
-<body>
-  <h1>Driver Real-Time Tracking</h1>
-  <div id="map" style="height: 500px; width: 100%;"></div>
-  <script src="https://cdn.socket.io/4.7.2/socket.io.min.js"></script>
-  <script src="script.js"></script>
-</body>
-</html>
+const socket = io("http://localhost:3000"); // Connect to Node.js backend
+let map;
+let driverMarker;
+let driverPosition = { lat: 37.7749, lng: -122.4194 }; // Default: San Francisco
+
+function initMap() {
+  map = new google.maps.Map(document.getElementById("map"), {
+    center: driverPosition,
+    zoom: 14,
+  });
+
+  driverMarker = new google.maps.Marker({
+    position: driverPosition,
+    map: map,
+    title: "Driver Location",
+  });
+
+  socket.on("locationUpdate", (data) => {
+    driverPosition = { lat: data.lat, lng: data.lng };
+    driverMarker.setPosition(driverPosition);
+    map.setCenter(driverPosition);
+  });
+
+  socket.on("routeUpdate", (route) => {
+    drawRoute(route);
+  });
+}
+
+function drawRoute(route) {
+  const routePath = route.routes[0].geometry.coordinates.map(([lng, lat]) => ({
+    lat,
+    lng,
+  }));
+
+  new google.maps.Polyline({
+    path: routePath,
+    geodesic: true,
+    strokeColor: "#FF0000",
+    strokeOpacity: 1.0,
+    strokeWeight: 4,
+    map: map,
+  });
+}
+
+window.onload = initMap;
